@@ -176,8 +176,6 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
         nonReentrant
         onlyOwner
     {
-        // unsure if we need this check
-        require(amount > 0, "must claim positive amount");
         uint256 claimable = _calculateRate(address(this).balance);
         require(amount <= claimable, "claimed too much");
         payable(owner).transfer(amount);
@@ -188,11 +186,9 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
         nonReentrant
         onlyOwner
     {
-        // unsure if we need this check
-        require(amount > 0, "must claim positive amount");
-        uint256 claimable = _calculateRate(
-            IERC20(token).balanceOf(address(this))
-        );
+        uint256 bal = IERC20(token).balanceOf(address(this));
+        require(bal > 0, "no token balance");
+        uint256 claimable = _calculateRate(bal);
         require(amount <= claimable, "claimed too much");
         IERC20(token).transfer(owner, amount);
     }

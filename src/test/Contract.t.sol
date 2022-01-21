@@ -8,23 +8,29 @@ import {Hevm} from "./utils/Hevm.sol";
 
 import {TimelockedFundsReceiver} from "./../TimelockedFundsReceiver.sol";
 
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import {MockERC20} from "./utils/MockERC20.sol";
 
 contract ContractTest is DSTest {
     Hevm internal immutable hevm = Hevm(HEVM_ADDRESS);
-    using SafeMath for uint256;
 
     Utilities internal utils;
     TimelockedFundsReceiver internal tlfr;
+    TimelockedFundsReceiver internal tlfr2;
+    MockERC20 internal xyz;
+    MockERC20 internal abc;
     address payable[] internal users;
 
     function setUp() public {
         utils = new Utilities();
         users = utils.createUsers(5);
         address payable alice = users[0];
-        hevm.prank(alice);
+        hevm.startPrank(alice);
         hevm.warp(100);
         tlfr = new TimelockedFundsReceiver(1000, 0);
+        // with cliff
+        tlfr2 = new TimelockedFundsReceiver(1000, 250);
+        xyz = new MockERC20("test coin", "XYZ", alice, 1000);
+        abc = new MockERC20("another test", "ABC", alice, 1000);
     }
 
     function testSetup() public {
@@ -47,13 +53,87 @@ contract ContractTest is DSTest {
         tlfr.transferOwnership(alice);
     }
 
-    function testFundAccount() public {
+    function testEth() public {
         address payable alice = users[0];
         address payable t = payable(address(tlfr));
         hevm.deal(alice, 10000);
-        hevm.prank(alice);
+        hevm.startPrank(alice);
         (bool sent, ) = t.call{value: 100}("");
         assertTrue(sent);
+        hevm.warp(600);
+        hevm.expectRevert("claimed too much");
+        tlfr.claimNative(1000);
+        tlfr.claimNative(50);
+        hevm.expectRevert("claimed too much");
+        tlfr.claimNative(50);
+        hevm.warp(1100);
+        tlfr.claimNative(50);
+    }
+
+    function testCliffFuzz(uint256 x) public {
+        address payable alice = users[0];
+        hevm.startPrank(alice);
+        assertEq(tlfr2.calculateRate(x), 0);
+        hevm.warp(349);
+        assertEq(tlfr2.calculateRate(x), 0);
+        hevm.warp(350);
+        assertEq(tlfr2.calculateRate(x), x / 4);
+    }
+
+    function testEthFuzz(uint256 x) public {
+        address payable alice = users[0];
+        address payable t = payable(address(tlfr));
+        hevm.deal(alice, x);
+        hevm.startPrank(alice);
+        (bool sent, ) = t.call{value: x}("");
+        assertTrue(sent);
+        hevm.warp(600);
+        hevm.expectRevert("claimed too much");
+        tlfr.claimNative(x);
+        tlfr.claimNative(x / 2);
+        hevm.expectRevert("claimed too much");
+        tlfr.claimNative(x / 2);
+        hevm.warp(1100);
+        tlfr.claimNative(x / 2);
+    }
+
+    function testToken() public {
+        address payable alice = users[0];
+        hevm.startPrank(alice);
+        xyz.approve(address(tlfr), 1000);
+        xyz.transfer(address(tlfr), 1000);
+        assertEq(xyz.balanceOf(address(tlfr)), 1000);
+        hevm.warp(600);
+        hevm.expectRevert("claimed too much");
+        tlfr.claimWrapped(address(xyz), 1000);
+        hevm.expectRevert("no token balance");
+        tlfr.claimWrapped(address(abc), 1000);
+        hevm.warp(600);
+        tlfr.claimWrapped(address(xyz), 500);
+        hevm.expectRevert("claimed too much");
+        tlfr.claimWrapped(address(xyz), 500);
+        hevm.warp(1100);
+        tlfr.claimWrapped(address(xyz), 500);
+    }
+
+    function testTokenFuzz(uint256 x) public {
+        address payable alice = users[0];
+        hevm.startPrank(alice);
+        xyz = new MockERC20("test coin", "XYZ", alice, x);
+        xyz.approve(address(tlfr), x);
+        xyz.transfer(address(tlfr), x);
+        assertEq(xyz.balanceOf(address(tlfr)), x);
+        hevm.warp(600);
+        hevm.expectRevert("claimed too much");
+        tlfr.claimWrapped(address(xyz), x);
+        hevm.expectRevert("no token balance");
+        tlfr.claimWrapped(address(abc), x);
+        hevm.warp(600);
+        tlfr.claimWrapped(address(xyz), x / 2);
+        hevm.expectRevert("claimed too much");
+        tlfr.claimWrapped(address(xyz), x / 2);
+        hevm.warp(1100);
+        tlfr.claimWrapped(address(xyz), x / 2);
     }
 
     function testFinalRateWithFuzz(uint256 x) public {
@@ -65,6 +145,6 @@ contract ContractTest is DSTest {
         hevm.warp(600);
         uint256 val = tlfr.calculateRate(x);
         console.log(val);
-        assertEq(val, x.div(2));
+        assertEq(val, x / 2);
     }
 }
