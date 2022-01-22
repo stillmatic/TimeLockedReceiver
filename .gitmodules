@@ -10,3 +10,6 @@
 [submodule "lib/clone-factory"]
 	path = lib/clone-factory
 	url = https://github.com/optionality/clone-factory
+[submodule "lib/kamino"]
+	path = lib/kamino
+	url = https://github.com/stillmatic/kamino
