@@ -40,6 +40,45 @@ contract ContractTest is DSTest {
         abc = new MockERC20("another test", "ABC", alice, 1000);
     }
 
+    function testGasChild() public {
+        uint256 startGas = gasleft();
+        factory.createReceiver(1000, 500, users[0]);
+        uint256 endGas = gasleft();
+        uint256 usedGas = startGas - endGas;
+        // should be ~160k
+        assertLt(usedGas, 200_000);
+    }
+
+    function testGasWithdrawWrapped() public {
+        hevm.startPrank(users[0]);
+        xyz.approve(address(tlfr), 1000);
+        xyz.transfer(address(tlfr), 1000);
+        hevm.warp(600);
+        uint256 startGas = gasleft();
+        tlfr.claimWrapped(address(xyz), 500);
+        uint256 endGas = gasleft();
+        uint256 usedGas = startGas - endGas;
+        // should be ~50k
+        assertLt(usedGas, 55_000);
+    }
+
+    function testGasWithdrawNative() public {
+        address alice = users[0];
+        address payable t = payable(address(tlfr));
+        hevm.deal(alice, 10000);
+        hevm.startPrank(alice);
+        (bool sent, ) = t.call{value: 1000}("");
+        assertTrue(sent);
+        hevm.warp(600);
+        uint256 startGas = gasleft();
+        tlfr.claimNative(500);
+        uint256 endGas = gasleft();
+        uint256 usedGas = startGas - endGas;
+        console.log("USED GAS", usedGas);
+        // should be ~33k
+        assertLt(usedGas, 35_000);
+    }
+
     function testSetup() public {
         assertEq(tlfr.owner(), users[0]);
         assertEq(tlfr.calculateRate(10000), 0);

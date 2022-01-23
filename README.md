@@ -8,8 +8,13 @@ Why is this good?
 
 - Contract owners can signal their long-term focus by agreeing to lock funds for a longer period of time. For example, NFT project creators can show their long-term intent by dedicating royalty fees to this contract.
 - Token owners can also signal their long term intent by timelocking funds.
+- In the future, we could support delegating flows from this contract to other wallets. This flow delegation would be tricky if the flows went directly to a end user wallet.
 
-This is unaudited code that should not be used for anything meaningful.
+Other implementation details:
+
+- Tested and fuzzed with [Foundry](https://github.com/gakonst/foundry/). Fuzzing caught a number of overflow errors and things seem reasonably solid but --- this is unaudited code that should not be used for anything meaningful!
+- We use a clone factory approach to minimize gas costs of additional deploys.
+- A deploy currently costs about 160k gwei, less than a Uniswap swap. A withdrawal costs about 50k gwei for ERC20 and 33k for native ETH, versus 25k for a native ERC20 transfer cost.
 
 ## Development
 

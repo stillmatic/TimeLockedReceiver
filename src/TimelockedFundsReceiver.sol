@@ -3,7 +3,6 @@ pragma solidity >=0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
 contract TimelockedFundsReceiver is ReentrancyGuard {
     address public owner;
@@ -11,40 +10,18 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
     uint256 public vestDuration;
     uint256 public cliffDuration;
 
-    using SafeMath for uint256;
-
     modifier onlyOwner() {
         require(msg.sender == owner, "must be contract owner");
         _;
     }
 
-    constructor() {}
+    event Withdrawal(address who, address token, uint256 amount);
 
-    function init(
-        uint256 _vestDuration,
-        uint256 _cliffDuration,
-        address _owner
-    ) external {
-        require(_vestDuration > 0, "must have positive vest duration");
-        createdAt = block.timestamp; // solhint-disable-line not-rely-on-time
-        vestDuration = _vestDuration;
-        cliffDuration = _cliffDuration;
-        owner = _owner;
-    }
+    constructor() {}
 
     fallback() external payable {}
 
     receive() external payable {}
-
-    /**
-     * @dev transfers ownership to a new address
-     *
-     * We don't check for null address, you can burn this if you want
-     * Also doesn't claim all rewards, since we don't know which tokens this contract has received
-     */
-    function transferOwnership(address newOwner) external onlyOwner {
-        owner = newOwner;
-    }
 
     /// @notice Calculates floor(a×b÷denominator) with full precision. Throws if result overflows a uint256 or denominator == 0
     /// @param a The multiplicand
@@ -167,8 +144,7 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
         uint256 elapsed = block.timestamp - createdAt; // solhint-disable-line not-rely-on-time
         if (elapsed < cliffDuration) return 0;
         if (elapsed >= vestDuration) return amount;
-        uint256 val = mulDiv(amount, elapsed, vestDuration);
-        return val;
+        return mulDiv(amount, elapsed, vestDuration);
     }
 
     function calculateRate(uint256 amount) external view returns (uint256) {
@@ -189,10 +165,13 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
         uint256 claimable = _calculateRate(address(this).balance);
         require(amount <= claimable, "claimed too much");
         payable(owner).transfer(amount);
+        emit Withdrawal(owner, address(0), amount);
     }
 
     /**
      * @notice Claims tokens sent to this contract
+     *
+     * Calculates total coins available then checks how many of those are claimable.
      *
      * @param token the token address to claim
      * @param amount how much to attempt to claim
@@ -207,5 +186,27 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
         uint256 claimable = _calculateRate(bal);
         require(amount <= claimable, "claimed too much");
         IERC20(token).transfer(owner, amount);
+        emit Withdrawal(owner, token, amount);
+    }
+
+    /**
+     * @dev transfers ownership to a new address
+     *
+     * We don't check for null address, you can burn this if you want
+     * Also doesn't claim all rewards, since we don't know which tokens this contract has received
+     */
+    function transferOwnership(address newOwner) external onlyOwner {
+        owner = newOwner;
+    }
+
+    function init(
+        uint256 _vestDuration,
+        uint256 _cliffDuration,
+        address _owner
+    ) external {
+        createdAt = block.timestamp; // solhint-disable-line not-rely-on-time
+        vestDuration = _vestDuration;
+        cliffDuration = _cliffDuration;
+        owner = _owner;
     }
 }
