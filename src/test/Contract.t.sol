@@ -89,11 +89,11 @@ contract ContractTest is DSTest {
         address payable alice = users[0];
         address payable bob = users[1];
         hevm.prank(bob);
-        hevm.expectRevert("must be contract owner");
+        hevm.expectRevert("Ownable: caller is not the owner");
         tlfr.transferOwnership(bob);
         hevm.prank(alice);
         tlfr.transferOwnership(bob);
-        hevm.expectRevert("must be contract owner");
+        hevm.expectRevert("Ownable: caller is not the owner");
         tlfr.transferOwnership(bob);
         hevm.prank(bob);
         tlfr.transferOwnership(alice);

@@ -3,17 +3,13 @@ pragma solidity >=0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract TimelockedFundsReceiver is ReentrancyGuard {
-    address public owner;
+contract TimelockedFundsReceiver is ReentrancyGuard, Ownable {
     uint256 public createdAt;
     uint256 public vestDuration;
     uint256 public cliffDuration;
-
-    modifier onlyOwner() {
-        require(msg.sender == owner, "must be contract owner");
-        _;
-    }
+    bool private isReady;
 
     event Withdrawal(address who, address token, uint256 amount);
 
@@ -164,8 +160,8 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
     {
         uint256 claimable = _calculateRate(address(this).balance);
         require(amount <= claimable, "claimed too much");
-        payable(owner).transfer(amount);
-        emit Withdrawal(owner, address(0), amount);
+        payable(owner()).transfer(amount);
+        emit Withdrawal(owner(), address(0), amount);
     }
 
     /**
@@ -185,28 +181,21 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
         require(bal > 0, "no token balance");
         uint256 claimable = _calculateRate(bal);
         require(amount <= claimable, "claimed too much");
-        IERC20(token).transfer(owner, amount);
-        emit Withdrawal(owner, token, amount);
-    }
-
-    /**
-     * @dev transfers ownership to a new address
-     *
-     * We don't check for null address, you can burn this if you want
-     * Also doesn't claim all rewards, since we don't know which tokens this contract has received
-     */
-    function transferOwnership(address newOwner) external onlyOwner {
-        owner = newOwner;
+        IERC20(token).transfer(owner(), amount);
+        emit Withdrawal(owner(), token, amount);
     }
 
     function init(
         uint256 _vestDuration,
         uint256 _cliffDuration,
-        address _owner
+        address _newOwner
     ) external {
+        require(!isReady, "already initialized");
         createdAt = block.timestamp; // solhint-disable-line not-rely-on-time
+
         vestDuration = _vestDuration;
         cliffDuration = _cliffDuration;
-        owner = _owner;
+        _transferOwnership(_newOwner);
+        isReady = true;
     }
 }
