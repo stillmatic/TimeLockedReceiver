@@ -18,12 +18,18 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
         _;
     }
 
-    constructor(uint256 _vestDuration, uint256 _cliffDuration) {
+    constructor() {}
+
+    function init(
+        uint256 _vestDuration,
+        uint256 _cliffDuration,
+        address _owner
+    ) external {
         require(_vestDuration > 0, "must have positive vest duration");
         createdAt = block.timestamp; // solhint-disable-line not-rely-on-time
         vestDuration = _vestDuration;
         cliffDuration = _cliffDuration;
-        owner = msg.sender;
+        owner = _owner;
     }
 
     fallback() external payable {}
@@ -155,8 +161,7 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
      * We are guaranteed the vestDuration > 0 from the constructor so not checking here
      * We probably do not need to check if elapsed > 0 either
 
-     * @param amount -- the amount you are checking. I don't think we need to check for negative
-     * since solidity shouldn't allow you to, and we have the 
+     * @param amount -- the amount you are checking. 
      */
     function _calculateRate(uint256 amount) internal view returns (uint256) {
         uint256 elapsed = block.timestamp - createdAt; // solhint-disable-line not-rely-on-time
@@ -170,6 +175,11 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
         return _calculateRate(amount);
     }
 
+    /**
+     * @notice Claims ETH sent to this contract
+     *
+     * @param amount how much to attempt to claim
+     */
     function claimNative(uint256 amount)
         external
         payable
@@ -181,6 +191,12 @@ contract TimelockedFundsReceiver is ReentrancyGuard {
         payable(owner).transfer(amount);
     }
 
+    /**
+     * @notice Claims tokens sent to this contract
+     *
+     * @param token the token address to claim
+     * @param amount how much to attempt to claim
+     */
     function claimWrapped(address token, uint256 amount)
         external
         nonReentrant

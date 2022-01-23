@@ -7,6 +7,7 @@ import {console} from "./utils/Console.sol";
 import {Hevm} from "./utils/Hevm.sol";
 
 import {TimelockedFundsReceiver} from "./../TimelockedFundsReceiver.sol";
+import {TimelockedFundsReceiverFactory} from "./../TimelockedFundsReceiverFactory.sol";
 
 import {MockERC20} from "./utils/MockERC20.sol";
 
@@ -14,6 +15,8 @@ contract ContractTest is DSTest {
     Hevm internal immutable hevm = Hevm(HEVM_ADDRESS);
 
     Utilities internal utils;
+    TimelockedFundsReceiverFactory internal factory;
+    TimelockedFundsReceiver internal global;
     TimelockedFundsReceiver internal tlfr;
     TimelockedFundsReceiver internal tlfr2;
     MockERC20 internal xyz;
@@ -26,9 +29,13 @@ contract ContractTest is DSTest {
         address payable alice = users[0];
         hevm.startPrank(alice);
         hevm.warp(100);
-        tlfr = new TimelockedFundsReceiver(1000, 0);
-        // with cliff
-        tlfr2 = new TimelockedFundsReceiver(1000, 250);
+        global = new TimelockedFundsReceiver();
+        factory = new TimelockedFundsReceiverFactory(address(global));
+        factory.createReceiver(1000, 0, alice);
+        factory.createReceiver(1000, 250, alice);
+
+        tlfr = factory.children(0);
+        tlfr2 = factory.children(1);
         xyz = new MockERC20("test coin", "XYZ", alice, 1000);
         abc = new MockERC20("another test", "ABC", alice, 1000);
     }
@@ -144,7 +151,6 @@ contract ContractTest is DSTest {
     function testIntermediateRateWithFuzz(uint256 x) public {
         hevm.warp(600);
         uint256 val = tlfr.calculateRate(x);
-        console.log(val);
         assertEq(val, x / 2);
     }
 }

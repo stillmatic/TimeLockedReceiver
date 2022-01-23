@@ -1,6 +1,8 @@
 pragma solidity ^0.8.4;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+// import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+import "solmate/tokens/ERC20.sol";
 
 contract MockERC20 is ERC20 {
     constructor(
@@ -8,7 +10,7 @@ contract MockERC20 is ERC20 {
         string memory symbol,
         address initialAccount,
         uint256 initialBalance
-    ) payable ERC20(name, symbol) {
+    ) payable ERC20(name, symbol, 18) {
         _mint(initialAccount, initialBalance);
     }
 
@@ -23,16 +25,30 @@ contract MockERC20 is ERC20 {
     function transferInternal(
         address from,
         address to,
-        uint256 value
-    ) public {
-        _transfer(from, to, value);
+        uint256 amount
+    ) public returns (bool) {
+        balanceOf[from] -= amount;
+
+        // Cannot overflow because the sum of all user
+        // balances can't exceed the max uint256 value.
+        unchecked {
+            balanceOf[to] += amount;
+        }
+
+        emit Transfer(from, to, amount);
+
+        return true;
     }
 
     function approveInternal(
         address owner,
         address spender,
-        uint256 value
-    ) public {
-        _approve(owner, spender, value);
+        uint256 amount
+    ) public returns (bool) {
+        allowance[owner][spender] = amount;
+
+        emit Approval(owner, spender, amount);
+
+        return true;
     }
 }
