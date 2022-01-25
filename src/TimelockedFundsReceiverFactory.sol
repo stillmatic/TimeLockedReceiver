@@ -2,13 +2,14 @@
 pragma solidity >=0.8.0;
 
 import "./TimelockedFundsReceiver.sol";
-import "./MinimalProxy.sol";
+// import "./MinimalProxy.sol";
+import "clones-with-immutable-args/ClonesWithImmutableArgs.sol";
 
-contract TimelockedFundsReceiverFactory is MinimalProxy {
-    TimelockedFundsReceiver[] public children;
-    address public mainContract;
+contract TimelockedFundsReceiverFactory {
+    using ClonesWithImmutableArgs for address payable;
+    TimelockedFundsReceiver public mainContract;
 
-    constructor(address _mainContract) {
+    constructor(TimelockedFundsReceiver _mainContract) {
         mainContract = _mainContract;
     }
 
@@ -24,13 +25,18 @@ contract TimelockedFundsReceiverFactory is MinimalProxy {
         uint256 vestDuration,
         uint256 cliffDuration,
         address intendedOwner
-    ) external {
-        address payable childContract = payable(this.clone(mainContract));
-        TimelockedFundsReceiver tlfr = TimelockedFundsReceiver(childContract);
-        tlfr.init(vestDuration, cliffDuration, intendedOwner);
-        children.push(tlfr);
+    ) external returns (TimelockedFundsReceiver clone) {
+        bytes memory data = abi.encodePacked(
+            vestDuration,
+            cliffDuration,
+            block.timestamp
+        );
+        address payable impl = payable(address(mainContract));
+        clone = TimelockedFundsReceiver(payable(impl.clone(data)));
+        clone.init(intendedOwner);
+
         emit ReceiverCreated(
-            address(tlfr),
+            address(clone),
             msg.sender,
             intendedOwner,
             vestDuration,

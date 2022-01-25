@@ -3,3 +3,4 @@ solmate/=lib/solmate/src/
 @openzeppelin/=lib/openzeppelin-contracts/
 @optionality.io/clone-factory=lib/clone-factory
 kamino=lib/kamino/src/
+clones-with-immutable-args=lib/clones-with-immutable-args/src/

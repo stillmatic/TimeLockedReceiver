@@ -30,12 +30,10 @@ contract ContractTest is DSTest {
         hevm.startPrank(alice);
         hevm.warp(100);
         global = new TimelockedFundsReceiver();
-        factory = new TimelockedFundsReceiverFactory(address(global));
-        factory.createReceiver(1000, 0, alice);
-        factory.createReceiver(1000, 250, alice);
+        factory = new TimelockedFundsReceiverFactory(global);
+        tlfr = factory.createReceiver(1000, 0, alice);
+        tlfr2 = factory.createReceiver(1000, 250, alice);
 
-        tlfr = factory.children(0);
-        tlfr2 = factory.children(1);
         xyz = new MockERC20("test coin", "XYZ", alice, 1000);
         abc = new MockERC20("another test", "ABC", alice, 1000);
     }
@@ -45,8 +43,9 @@ contract ContractTest is DSTest {
         factory.createReceiver(1000, 500, users[0]);
         uint256 endGas = gasleft();
         uint256 usedGas = startGas - endGas;
-        // should be ~160k
-        assertLt(usedGas, 200_000);
+        console.log("Deploy gas", usedGas);
+        // should be ~129945
+        assertLt(usedGas, 150_000);
     }
 
     function testGasWithdrawWrapped() public {
@@ -58,7 +57,8 @@ contract ContractTest is DSTest {
         tlfr.claimWrapped(address(xyz), 500);
         uint256 endGas = gasleft();
         uint256 usedGas = startGas - endGas;
-        // should be ~50k
+        console.log("Wrapped gas", usedGas);
+        // should be ~50752
         assertLt(usedGas, 55_000);
     }
 
@@ -74,14 +74,15 @@ contract ContractTest is DSTest {
         tlfr.claimNative(500);
         uint256 endGas = gasleft();
         uint256 usedGas = startGas - endGas;
-        console.log("USED GAS", usedGas);
-        // should be ~33k
+        console.log("Native gas", usedGas);
+        // should be ~32964
         assertLt(usedGas, 35_000);
     }
 
     function testSetup() public {
+        hevm.warp(100);
         assertEq(tlfr.owner(), users[0]);
-        assertEq(tlfr.calculateRate(10000), 0);
+        assertEq(tlfr.calculateRate(10000, 100), 0);
         assertEq(tlfr.createdAt(), 100);
     }
 
@@ -119,11 +120,12 @@ contract ContractTest is DSTest {
     function testCliffFuzz(uint256 x) public {
         address payable alice = users[0];
         hevm.startPrank(alice);
-        assertEq(tlfr2.calculateRate(x), 0);
+        hevm.warp(100);
+        assertEq(tlfr2.calculateRate(x, 100), 0);
         hevm.warp(349);
-        assertEq(tlfr2.calculateRate(x), 0);
+        assertEq(tlfr2.calculateRate(x, 349), 0);
         hevm.warp(350);
-        assertEq(tlfr2.calculateRate(x), x / 4);
+        assertEq(tlfr2.calculateRate(x, 350), x / 4);
     }
 
     function testEthFuzz(uint256 x) public {
@@ -184,12 +186,12 @@ contract ContractTest is DSTest {
 
     function testFinalRateWithFuzz(uint256 x) public {
         hevm.warp(1100);
-        assertEq(tlfr.calculateRate(x), x);
+        assertEq(tlfr.calculateRate(x, 1100), x);
     }
 
     function testIntermediateRateWithFuzz(uint256 x) public {
         hevm.warp(600);
-        uint256 val = tlfr.calculateRate(x);
+        uint256 val = tlfr.calculateRate(x, 600);
         assertEq(val, x / 2);
     }
 }

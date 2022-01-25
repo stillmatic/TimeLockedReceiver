@@ -5,19 +5,40 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract TimelockedFundsReceiver is ReentrancyGuard, Ownable {
-    uint256 public createdAt;
-    uint256 public vestDuration;
-    uint256 public cliffDuration;
+import {Clone} from "clones-with-immutable-args/Clone.sol";
+
+contract TimelockedFundsReceiver is ReentrancyGuard, Ownable, Clone {
     bool private isReady;
 
     event Withdrawal(address who, address token, uint256 amount);
 
-    constructor() {}
-
     fallback() external payable {}
 
     receive() external payable {}
+
+    function _createdAt() internal pure returns (uint256) {
+        return _getArgUint256(64);
+    }
+
+    function _vestDuration() internal pure returns (uint256) {
+        return _getArgUint256(0);
+    }
+
+    function _cliffDuration() internal pure returns (uint256) {
+        return _getArgUint256(32);
+    }
+
+    function createdAt() external pure returns (uint256) {
+        return _createdAt();
+    }
+
+    function vestDuration() external pure returns (uint256) {
+        return _vestDuration();
+    }
+
+    function cliffDuration() external pure returns (uint256) {
+        return _cliffDuration();
+    }
 
     /// @notice Calculates floor(a×b÷denominator) with full precision. Throws if result overflows a uint256 or denominator == 0
     /// @param a The multiplicand
@@ -132,19 +153,27 @@ contract TimelockedFundsReceiver is ReentrancyGuard, Ownable {
     /**
      * @dev returns the current rate that the owner is allowed to take funds at
      * We are guaranteed the vestDuration > 0 from the constructor so not checking here
-     * We probably do not need to check if elapsed > 0 either
-
-     * @param amount -- the amount you are checking. 
+     * No divide by zero check because if _vestDuration() it returns beforehand.
+     *
+     * @param amount -- the amount you are checking.
      */
-    function _calculateRate(uint256 amount) internal view returns (uint256) {
-        uint256 elapsed = block.timestamp - createdAt; // solhint-disable-line not-rely-on-time
-        if (elapsed < cliffDuration) return 0;
-        if (elapsed >= vestDuration) return amount;
-        return mulDiv(amount, elapsed, vestDuration);
+    function _calculateRate(uint256 amount, uint256 ts)
+        internal
+        pure
+        returns (uint256)
+    {
+        uint256 elapsed = ts - _createdAt(); // solhint-disable-line not-rely-on-time
+        if (elapsed < _cliffDuration()) return 0;
+        if (elapsed >= _vestDuration()) return amount;
+        return mulDiv(amount, elapsed, _vestDuration());
     }
 
-    function calculateRate(uint256 amount) external view returns (uint256) {
-        return _calculateRate(amount);
+    function calculateRate(uint256 amount, uint256 ts)
+        external
+        pure
+        returns (uint256)
+    {
+        return _calculateRate(amount, ts);
     }
 
     /**
@@ -158,7 +187,8 @@ contract TimelockedFundsReceiver is ReentrancyGuard, Ownable {
         nonReentrant
         onlyOwner
     {
-        uint256 claimable = _calculateRate(address(this).balance);
+        uint256 ts = block.timestamp;
+        uint256 claimable = _calculateRate(address(this).balance, ts);
         require(amount <= claimable, "claimed too much");
         payable(owner()).transfer(amount);
         emit Withdrawal(owner(), address(0), amount);
@@ -179,23 +209,16 @@ contract TimelockedFundsReceiver is ReentrancyGuard, Ownable {
     {
         uint256 bal = IERC20(token).balanceOf(address(this));
         require(bal > 0, "no token balance");
-        uint256 claimable = _calculateRate(bal);
+        uint256 ts = block.timestamp;
+        uint256 claimable = _calculateRate(bal, ts);
         require(amount <= claimable, "claimed too much");
         IERC20(token).transfer(owner(), amount);
         emit Withdrawal(owner(), token, amount);
     }
 
-    function init(
-        uint256 _vestDuration,
-        uint256 _cliffDuration,
-        address _newOwner
-    ) external {
+    function init(address intendedOwner) external {
         require(!isReady, "already initialized");
-        createdAt = block.timestamp; // solhint-disable-line not-rely-on-time
-
-        vestDuration = _vestDuration;
-        cliffDuration = _cliffDuration;
-        _transferOwnership(_newOwner);
+        _transferOwnership(intendedOwner);
         isReady = true;
     }
 }

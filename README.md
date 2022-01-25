@@ -14,7 +14,7 @@ Other implementation details:
 
 - Tested and fuzzed with [Foundry](https://github.com/gakonst/foundry/). Fuzzing caught a number of overflow errors and things seem reasonably solid but --- this is unaudited code that should not be used for anything meaningful!
 - We use a clone factory approach to minimize gas costs of additional deploys.
-- A deploy currently costs about 160k gwei, less than a Uniswap swap. A withdrawal costs about 50k gwei for ERC20 and 33k for native ETH, versus 25k for a native ERC20 transfer cost.
+- A deploy currently costs about 92k gwei, half of a Uniswap swap. A withdrawal costs about 50k gwei for ERC20 and 33k for native ETH, versus 25k for a native ERC20 transfer cost.
 
 ## Development
 
