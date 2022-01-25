@@ -13,3 +13,6 @@
 [submodule "lib/kamino"]
 	path = lib/kamino
 	url = https://github.com/stillmatic/kamino
+[submodule "lib/clones-with-immutable-args"]
+	path = lib/clones-with-immutable-args
+	url = https://github.com/wighawag/clones-with-immutable-args
