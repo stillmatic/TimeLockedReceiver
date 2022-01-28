@@ -15,6 +15,7 @@ import {Utils} from "./Utils.sol";
  */
 contract TimelockedFundsReceiver is ReentrancyGuard, Ownable, Clone {
     bool private isReady;
+    mapping(address => uint256) private claimed;
 
     event Withdrawal(address who, address token, uint256 amount);
 
@@ -53,23 +54,25 @@ contract TimelockedFundsReceiver is ReentrancyGuard, Ownable, Clone {
      *
      * @param amount -- the amount you are checking.
      */
-    function _calculateRate(uint256 amount, uint256 ts)
-        internal
-        pure
-        returns (uint256)
-    {
+    function _calculateRate(
+        uint256 amount,
+        uint256 ts,
+        uint256 claimedAlready
+    ) internal pure returns (uint256) {
         uint256 elapsed = ts - _createdAt(); // solhint-disable-line not-rely-on-time
         if (elapsed < _cliffDuration()) return 0;
         if (elapsed >= _vestDuration()) return amount;
-        return Utils.mulDiv(amount, elapsed, _vestDuration());
+        return
+            Utils.mulDiv(amount + claimedAlready, elapsed, _vestDuration()) -
+            claimedAlready;
     }
 
-    function calculateRate(uint256 amount, uint256 ts)
-        external
-        pure
-        returns (uint256)
-    {
-        return _calculateRate(amount, ts);
+    function calculateRate(
+        uint256 amount,
+        uint256 ts,
+        uint256 claimedAlready
+    ) external pure returns (uint256) {
+        return _calculateRate(amount, ts, claimedAlready);
     }
 
     /**
@@ -84,10 +87,26 @@ contract TimelockedFundsReceiver is ReentrancyGuard, Ownable, Clone {
         onlyOwner
     {
         uint256 ts = block.timestamp;
-        uint256 claimable = _calculateRate(address(this).balance, ts);
+        uint256 claimedAlready = claimed[address(0)];
+        uint256 claimable = _calculateRate(
+            address(this).balance,
+            ts,
+            claimedAlready
+        );
         require(amount <= claimable, "claimed too much");
         payable(owner()).transfer(amount);
+        claimed[address(0)] = claimed[address(0)] + amount;
         emit Withdrawal(owner(), address(0), amount);
+    }
+
+    function _calculateWrappedAmount(
+        uint256 bal,
+        uint256 ts,
+        uint256 claimedAlready
+    ) internal pure returns (uint256) {
+        require(bal > 0, "no token balance");
+        uint256 claimable = _calculateRate(bal, ts, claimedAlready);
+        return claimable;
     }
 
     /**
@@ -96,22 +115,24 @@ contract TimelockedFundsReceiver is ReentrancyGuard, Ownable, Clone {
      * Calculates total coins available then withdraws them.
      *
      * @param token the token address to claim
-     * @param amount how much to attempt to claim
      */
-    function claimWrapped(address token, uint256 amount)
-        external
-        nonReentrant
-        onlyOwner
-    {
-        uint256 bal = IERC20(token).balanceOf(address(this));
-        require(bal > 0, "no token balance");
+    function claimWrapped(address token) external nonReentrant onlyOwner {
         uint256 ts = block.timestamp;
-        uint256 claimable = _calculateRate(bal, ts);
-        require(amount <= claimable, "claimed too much");
-        IERC20(token).transfer(owner(), amount);
-        emit Withdrawal(owner(), token, amount);
+        uint256 bal = IERC20(token).balanceOf(address(this));
+        uint256 claimedAlready = claimed[token];
+        uint256 claimable = _calculateWrappedAmount(bal, ts, claimedAlready);
+        IERC20(token).transfer(owner(), claimable);
+        claimed[token] = claimed[token] + claimable;
+        emit Withdrawal(owner(), token, claimable);
     }
 
+    /**
+     * @notice initialize the contract with an owner
+     *
+     * This can be called by anyone but only once.
+     * In practice, we call this from the create clone function in a factory.
+     * Owner must be mutable here, so it can't be in the call pattern.
+     */
     function init(address intendedOwner) external {
         require(!isReady, "already initialized");
         _transferOwnership(intendedOwner);

@@ -55,7 +55,7 @@ contract ContractTest is DSTest {
         xyz.transfer(address(tlfr), 1000);
         hevm.warp(600);
         uint256 startGas = gasleft();
-        tlfr.claimWrapped(address(xyz), 500);
+        tlfr.claimWrapped(address(xyz));
         uint256 endGas = gasleft();
         uint256 usedGas = startGas - endGas;
         console.log("Wrapped gas", usedGas);
@@ -83,7 +83,7 @@ contract ContractTest is DSTest {
     function testSetup() public {
         hevm.warp(100);
         assertEq(tlfr.owner(), users[0]);
-        assertEq(tlfr.calculateRate(10000, 100), 0);
+        assertEq(tlfr.calculateRate(10000, 100, 0), 0);
         assertEq(tlfr.createdAt(), 100);
     }
 
@@ -122,11 +122,11 @@ contract ContractTest is DSTest {
         address payable alice = users[0];
         hevm.startPrank(alice);
         hevm.warp(100);
-        assertEq(tlfr2.calculateRate(x, 100), 0);
+        assertEq(tlfr2.calculateRate(x, 100, 0), 0);
         hevm.warp(349);
-        assertEq(tlfr2.calculateRate(x, 349), 0);
+        assertEq(tlfr2.calculateRate(x, 349, 0), 0);
         hevm.warp(350);
-        assertEq(tlfr2.calculateRate(x, 350), x / 4);
+        assertEq(tlfr2.calculateRate(x, 350, 0), x / 4);
     }
 
     function testEthFuzz(uint256 x) public {
@@ -146,53 +146,61 @@ contract ContractTest is DSTest {
         tlfr.claimNative(x / 2);
     }
 
-    function testToken() public {
-        address payable alice = users[0];
-        hevm.startPrank(alice);
-        xyz.approve(address(tlfr), 1000);
-        xyz.transfer(address(tlfr), 1000);
-        assertEq(xyz.balanceOf(address(tlfr)), 1000);
-        hevm.warp(600);
-        hevm.expectRevert("claimed too much");
-        tlfr.claimWrapped(address(xyz), 1000);
-        hevm.expectRevert("no token balance");
-        tlfr.claimWrapped(address(abc), 1000);
-        hevm.warp(600);
-        tlfr.claimWrapped(address(xyz), 500);
-        hevm.expectRevert("claimed too much");
-        tlfr.claimWrapped(address(xyz), 500);
-        hevm.warp(1100);
-        tlfr.claimWrapped(address(xyz), 500);
-    }
-
     function testTokenFuzz(uint256 x) public {
+        if (x == 0) {
+            return;
+        }
         address payable alice = users[0];
         hevm.startPrank(alice);
         xyz = new MockERC20("test coin", "XYZ", alice, x);
         xyz.approve(address(tlfr), x);
         xyz.transfer(address(tlfr), x);
         assertEq(xyz.balanceOf(address(tlfr)), x);
-        hevm.warp(600);
-        hevm.expectRevert("claimed too much");
-        tlfr.claimWrapped(address(xyz), x);
         hevm.expectRevert("no token balance");
-        tlfr.claimWrapped(address(abc), x);
+        tlfr.claimWrapped(address(abc));
         hevm.warp(600);
-        tlfr.claimWrapped(address(xyz), x / 2);
-        hevm.expectRevert("claimed too much");
-        tlfr.claimWrapped(address(xyz), x / 2);
+        // this should be 1/2 of the balance
+        tlfr.claimWrapped(address(xyz));
+        uint256 tlfrBal = xyz.balanceOf(address(tlfr));
+        uint256 aliceBal = xyz.balanceOf(alice);
+        if (x % 2 == 0) {
+            console.log("expect", tlfrBal, ((x / 2) + 1));
+            assertEq(tlfrBal, x / 2);
+            console.log("expect", aliceBal, ((x / 2)));
+            assertEq(aliceBal, x / 2);
+        } else {
+            // console.log("expect", tlfrBal, ((x / 2) + 1));
+            assertEq(tlfrBal, ((x / 2) + 1));
+            // console.log("expect", aliceBal, ((x / 2)));
+            assertEq(aliceBal, (x / 2));
+        }
+        // this is the same as above since they should not be allowed to claim more.
+        tlfr.claimWrapped(address(xyz));
+        uint256 tlfrBal2 = xyz.balanceOf(address(tlfr));
+        uint256 aliceBal2 = xyz.balanceOf(alice);
+        if (x % 2 == 0) {
+            assertEq(tlfrBal2, x / 2);
+            assertEq(aliceBal2, x / 2);
+        } else {
+            console.log("expect", tlfrBal2, ((x / 2) + 1));
+            assertEq(tlfrBal2, ((x / 2) + 1));
+            console.log("expect", aliceBal2, ((x / 2)));
+            assertEq(aliceBal2, (x / 2));
+        }
         hevm.warp(1100);
-        tlfr.claimWrapped(address(xyz), x / 2);
+        tlfr.claimWrapped(address(xyz));
+        assertEq(xyz.balanceOf(address(tlfr)), 0);
+        assertEq(xyz.balanceOf(alice), x);
     }
 
     function testFinalRateWithFuzz(uint256 x) public {
         hevm.warp(1100);
-        assertEq(tlfr.calculateRate(x, 1100), x);
+        assertEq(tlfr.calculateRate(x, 1100, 0), x);
     }
 
     function testIntermediateRateWithFuzz(uint256 x) public {
         hevm.warp(600);
-        uint256 val = tlfr.calculateRate(x, 600);
+        uint256 val = tlfr.calculateRate(x, 600, 0);
         assertEq(val, x / 2);
     }
 }
