@@ -10,6 +10,7 @@ import {TimelockedFundsReceiver} from "./../TimelockedFundsReceiver.sol";
 import {TimelockedFundsReceiverFactory} from "./../TimelockedFundsReceiverFactory.sol";
 
 import {MockERC20} from "./utils/MockERC20.sol";
+import {Utils} from "../Utils.sol";
 
 contract ContractTest is DSTest {
     Hevm internal immutable hevm = Hevm(HEVM_ADDRESS);
