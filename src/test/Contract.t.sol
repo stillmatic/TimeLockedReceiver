@@ -59,8 +59,8 @@ contract ContractTest is DSTest {
         uint256 endGas = gasleft();
         uint256 usedGas = startGas - endGas;
         console.log("Wrapped gas", usedGas);
-        // should be ~50752
-        assertLt(usedGas, 55_000);
+        // should be ~73435
+        assertLt(usedGas, 75_000);
     }
 
     function testGasWithdrawNative() public {
@@ -76,8 +76,8 @@ contract ContractTest is DSTest {
         uint256 endGas = gasleft();
         uint256 usedGas = startGas - endGas;
         console.log("Native gas", usedGas);
-        // should be ~32964
-        assertLt(usedGas, 35_000);
+        // should be ~55534
+        assertLt(usedGas, 60_000);
     }
 
     function testSetup() public {
@@ -152,8 +152,8 @@ contract ContractTest is DSTest {
         }
         address payable alice = users[0];
         hevm.startPrank(alice);
-        xyz = new MockERC20("test coin", "XYZ", alice, x);
-        xyz.approve(address(tlfr), x);
+        xyz = new MockERC20("test coin", "XYZ", alice, x + 100);
+        xyz.approve(address(tlfr), x + 100);
         xyz.transfer(address(tlfr), x);
         assertEq(xyz.balanceOf(address(tlfr)), x);
         hevm.expectRevert("no token balance");
@@ -163,16 +163,17 @@ contract ContractTest is DSTest {
         tlfr.claimWrapped(address(xyz));
         uint256 tlfrBal = xyz.balanceOf(address(tlfr));
         uint256 aliceBal = xyz.balanceOf(alice);
+        console.log(tlfrBal, aliceBal);
         if (x % 2 == 0) {
             console.log("expect", tlfrBal, ((x / 2) + 1));
             assertEq(tlfrBal, x / 2);
             console.log("expect", aliceBal, ((x / 2)));
-            assertEq(aliceBal, x / 2);
+            assertEq(aliceBal, (x / 2) + 100);
         } else {
             // console.log("expect", tlfrBal, ((x / 2) + 1));
             assertEq(tlfrBal, ((x / 2) + 1));
             // console.log("expect", aliceBal, ((x / 2)));
-            assertEq(aliceBal, (x / 2));
+            assertEq(aliceBal, ((x / 2)) + 100);
         }
         // this is the same as above since they should not be allowed to claim more.
         tlfr.claimWrapped(address(xyz));
@@ -180,17 +181,32 @@ contract ContractTest is DSTest {
         uint256 aliceBal2 = xyz.balanceOf(alice);
         if (x % 2 == 0) {
             assertEq(tlfrBal2, x / 2);
-            assertEq(aliceBal2, x / 2);
+            assertEq(aliceBal2, (x / 2) + 100);
         } else {
-            console.log("expect", tlfrBal2, ((x / 2) + 1));
+            // console.log("expect2", tlfrBal2, ((x / 2) + 1));
             assertEq(tlfrBal2, ((x / 2) + 1));
-            console.log("expect", aliceBal2, ((x / 2)));
-            assertEq(aliceBal2, (x / 2));
+            // console.log("expect2", aliceBal2, ((x / 2) + 100));
+            assertEq(aliceBal2, (x / 2) + 100);
         }
+        // send some money to this wallet
+        xyz.transfer(address(tlfr), 100);
+        tlfr.claimWrapped(address(xyz));
+        uint256 tlfrBal3 = xyz.balanceOf(address(tlfr));
+        uint256 aliceBal3 = xyz.balanceOf(alice);
+        if (x % 2 == 0) {
+            assertEq(tlfrBal3, (x / 2) + 50);
+            assertEq(aliceBal3, (x / 2) + 50);
+        } else {
+            console.log("expect3", tlfrBal3, ((x / 2) + 1) + 50);
+            assertEq(tlfrBal3, ((x / 2) + 1) + 50);
+            console.log("expect3", aliceBal3, ((x / 2) + 50));
+            assertEq(aliceBal3, (x / 2) + 50);
+        }
+
         hevm.warp(1100);
         tlfr.claimWrapped(address(xyz));
         assertEq(xyz.balanceOf(address(tlfr)), 0);
-        assertEq(xyz.balanceOf(alice), x);
+        assertEq(xyz.balanceOf(alice), x + 100);
     }
 
     function testFinalRateWithFuzz(uint256 x) public {
