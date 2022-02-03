@@ -23,11 +23,12 @@ contract ContractTest is DSTest {
     MockERC20 internal xyz;
     MockERC20 internal abc;
     address payable[] internal users;
+    address payable alice;
 
     function setUp() public {
         utils = new Utilities();
         users = utils.createUsers(5);
-        address payable alice = users[0];
+        alice = users[0];
         hevm.startPrank(alice);
         hevm.warp(100);
         global = new TimelockedFundsReceiver();
@@ -64,7 +65,6 @@ contract ContractTest is DSTest {
     }
 
     function testGasWithdrawNative() public {
-        address alice = users[0];
         address payable t = payable(address(tlfr));
         hevm.deal(alice, 10000);
         hevm.startPrank(alice);
@@ -72,7 +72,7 @@ contract ContractTest is DSTest {
         assertTrue(sent);
         hevm.warp(600);
         uint256 startGas = gasleft();
-        tlfr.claimNative(500);
+        tlfr.claimNative();
         uint256 endGas = gasleft();
         uint256 usedGas = startGas - endGas;
         console.log("Native gas", usedGas);
@@ -85,10 +85,10 @@ contract ContractTest is DSTest {
         assertEq(tlfr.owner(), users[0]);
         assertEq(tlfr.calculateRate(10000, 100, 0), 0);
         assertEq(tlfr.createdAt(), 100);
+        assertEq(address(tlfr).balance, 0);
     }
 
     function testTransferOwnership() public {
-        address payable alice = users[0];
         address payable bob = users[1];
         hevm.prank(bob);
         hevm.expectRevert("Ownable: caller is not the owner");
@@ -101,25 +101,7 @@ contract ContractTest is DSTest {
         tlfr.transferOwnership(alice);
     }
 
-    function testEth() public {
-        address payable alice = users[0];
-        address payable t = payable(address(tlfr));
-        hevm.deal(alice, 10000);
-        hevm.startPrank(alice);
-        (bool sent, ) = t.call{value: 100}("");
-        assertTrue(sent);
-        hevm.warp(600);
-        hevm.expectRevert("claimed too much");
-        tlfr.claimNative(1000);
-        tlfr.claimNative(50);
-        hevm.expectRevert("claimed too much");
-        tlfr.claimNative(50);
-        hevm.warp(1100);
-        tlfr.claimNative(50);
-    }
-
     function testCliffFuzz(uint256 x) public {
-        address payable alice = users[0];
         hevm.startPrank(alice);
         hevm.warp(100);
         assertEq(tlfr2.calculateRate(x, 100, 0), 0);
@@ -129,28 +111,107 @@ contract ContractTest is DSTest {
         assertEq(tlfr2.calculateRate(x, 350, 0), x / 4);
     }
 
-    function testEthFuzz(uint256 x) public {
-        address payable alice = users[0];
+    // function testEthFuzz(uint256 x) public {
+    //     address payable t = payable(address(tlfr));
+    //     hevm.deal(alice, x);
+    //     hevm.startPrank(alice);
+    //     (bool sent, ) = t.call{value: x}("");
+    //     assertTrue(sent);
+    //     hevm.warp(600);
+    //     hevm.expectRevert("claimed too much");
+    //     tlfr.claimNative(x);
+    //     tlfr.claimNative(x / 2);
+    //     hevm.expectRevert("claimed too much");
+    //     tlfr.claimNative(x / 2);
+    //     hevm.warp(1100);
+    //     tlfr.claimNative(x / 2);
+    // }
+
+    function testNativeFuzz() public {
+        uint256 x = 1;
+        if (x == 0) {
+            return;
+        }
+        assertEq(address(tlfr).balance, 0);
         address payable t = payable(address(tlfr));
-        hevm.deal(alice, x);
+        address payable bob = users[1];
+        hevm.deal(alice, x + 100);
+        hevm.deal(bob, 100);
         hevm.startPrank(alice);
         (bool sent, ) = t.call{value: x}("");
+        assertEq(address(tlfr).balance, x);
+        assertEq(alice.balance, 100);
         assertTrue(sent);
+        // hevm.expectRevert("no token balance");
+        // tlfr.claimNative();
         hevm.warp(600);
-        hevm.expectRevert("claimed too much");
-        tlfr.claimNative(x);
-        tlfr.claimNative(x / 2);
-        hevm.expectRevert("claimed too much");
-        tlfr.claimNative(x / 2);
+        // this should be 1/2 of the balance
+        tlfr.claimNative();
+        uint256 tlfrBal = address(tlfr).balance;
+        uint256 aliceBal = alice.balance;
+        console.log("tlfr", tlfrBal, "alice", aliceBal);
+        if (x % 2 == 0) {
+            console.log("expect", tlfrBal, ((x / 2) + 1));
+            assertEq(tlfrBal, x / 2);
+            console.log("expect", aliceBal, ((x / 2)));
+            assertEq(aliceBal, (x / 2) + 100);
+        } else {
+            console.log("expect", tlfrBal, ((x / 2) + 1));
+            assertEq(tlfrBal, ((x / 2) + 1));
+            console.log("expect", aliceBal, ((x / 2) + 100));
+            assertEq(aliceBal, ((x / 2)) + 100);
+        }
+        // this is the same as above since they should not be allowed to claim more.
+        tlfr.claimNative();
+        uint256 tlfrBal2 = address(tlfr).balance;
+        uint256 aliceBal2 = alice.balance;
+        if (x % 2 == 0) {
+            assertEq(tlfrBal2, x / 2);
+            assertEq(aliceBal2, (x / 2) + 100);
+        } else {
+            console.log("expect2", tlfrBal2, ((x / 2) + 1));
+            assertEq(tlfrBal2, ((x / 2) + 1));
+            console.log("expect2", aliceBal2, ((x / 2) + 100));
+            assertEq(aliceBal2, (x / 2) + 100);
+        }
+        // send some money to this wallet
+        hevm.stopPrank();
+        hevm.prank(bob);
+        (bool sent2, ) = t.call{value: 100}("");
+        assertTrue(sent2);
+        assertEq(tlfrBal2 + 100, address(tlfr).balance);
+        assertEq(aliceBal2, alice.balance);
+        console.log("tlfr", address(tlfr).balance, "alice", alice.balance);
+        hevm.startPrank(alice);
+        // claim again
+        // should be allowed to claim half of the extra balance
+        tlfr.claimNative();
+        console.log("tlfr", address(tlfr).balance, "alice", alice.balance);
+        uint256 tlfrBal3 = address(tlfr).balance;
+        uint256 aliceBal3 = alice.balance;
+        if (x % 2 == 0) {
+            assertEq(tlfrBal3, (x / 2) + 50);
+            assertEq(aliceBal3, (x / 2) + 150);
+        } else {
+            console.log("expect3", tlfrBal3, ((x / 2) + 1) + 50);
+            assertEq(tlfrBal3, ((x / 2) + 1) + 50);
+            console.log("expect3", aliceBal3, ((x / 2) + 50));
+            assertEq(aliceBal3, (x / 2) + 150);
+        }
+
         hevm.warp(1100);
-        tlfr.claimNative(x / 2);
+        tlfr.claimNative();
+        console.log("expect4", address(tlfr).balance);
+        console.log("expect4", alice.balance);
+
+        assertEq(address(tlfr).balance, 0);
+        assertEq(alice.balance, x + 200);
     }
 
     function testTokenFuzz(uint256 x) public {
         if (x == 0) {
             return;
         }
-        address payable alice = users[0];
         hevm.startPrank(alice);
         xyz = new MockERC20("test coin", "XYZ", alice, x + 100);
         xyz.approve(address(tlfr), x + 100);

@@ -78,14 +78,9 @@ contract TimelockedFundsReceiver is ReentrancyGuard, Ownable, Clone {
     /**
      * @notice Claims ETH sent to this contract
      *
-     * @param amount how much to attempt to claim
+     * Calculates total ETH available then withdraws them.
      */
-    function claimNative(uint256 amount)
-        external
-        payable
-        nonReentrant
-        onlyOwner
-    {
+    function claimNative() external payable nonReentrant onlyOwner {
         uint256 ts = block.timestamp;
         uint256 claimedAlready = claimed[address(0)];
         uint256 claimable = _calculateRate(
@@ -93,20 +88,9 @@ contract TimelockedFundsReceiver is ReentrancyGuard, Ownable, Clone {
             ts,
             claimedAlready
         );
-        require(amount <= claimable, "claimed too much");
-        payable(owner()).transfer(amount);
-        claimed[address(0)] = claimed[address(0)] + amount;
-        emit Withdrawal(owner(), address(0), amount);
-    }
-
-    function _calculateWrappedAmount(
-        uint256 bal,
-        uint256 ts,
-        uint256 claimedAlready
-    ) internal pure returns (uint256) {
-        require(bal > 0, "no token balance");
-        uint256 claimable = _calculateRate(bal, ts, claimedAlready);
-        return claimable;
+        claimed[address(0)] = claimed[address(0)] + claimable;
+        payable(owner()).transfer(claimable);
+        emit Withdrawal(owner(), address(0), claimable);
     }
 
     /**
@@ -121,9 +105,19 @@ contract TimelockedFundsReceiver is ReentrancyGuard, Ownable, Clone {
         uint256 bal = IERC20(token).balanceOf(address(this));
         uint256 claimedAlready = claimed[token];
         uint256 claimable = _calculateWrappedAmount(bal, ts, claimedAlready);
-        IERC20(token).transfer(owner(), claimable);
         claimed[token] = claimed[token] + claimable;
+        IERC20(token).transfer(owner(), claimable);
         emit Withdrawal(owner(), token, claimable);
+    }
+
+    function _calculateWrappedAmount(
+        uint256 bal,
+        uint256 ts,
+        uint256 claimedAlready
+    ) internal pure returns (uint256) {
+        require(bal > 0, "no token balance");
+        uint256 claimable = _calculateRate(bal, ts, claimedAlready);
+        return claimable;
     }
 
     /**
