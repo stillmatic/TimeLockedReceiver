@@ -59,11 +59,12 @@ contract TimelockedFundsReceiver is ReentrancyGuard, Ownable, Clone {
         uint256 ts,
         uint256 claimedAlready
     ) internal pure returns (uint256) {
+        uint256 vestDuration_ = _vestDuration();
         uint256 elapsed = ts - _createdAt(); // solhint-disable-line not-rely-on-time
         if (elapsed < _cliffDuration()) return 0;
-        if (elapsed >= _vestDuration()) return amount;
+        if (elapsed >= vestDuration_) return amount;
         return
-            Utils.mulDiv(amount + claimedAlready, elapsed, _vestDuration()) -
+            Utils.mulDiv(amount + claimedAlready, elapsed, vestDuration_) -
             claimedAlready;
     }
 
